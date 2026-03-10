@@ -824,13 +824,16 @@
                 }
 
                 if (lastPrimarySection) {
-                    lastPrimarySection.after(sectionToInject);
-                } else {
-                    const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
-                    if (resultsContainer) {
-                        resultsContainer.prepend(sectionToInject);
+                    const firstPrimarySection = allSections[0];
+                    if (firstPrimarySection) {
+                        firstPrimarySection.before(sectionToInject);
                     } else {
-                        searchPage.appendChild(sectionToInject);
+                        const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
+                        if (resultsContainer) {
+                            resultsContainer.prepend(sectionToInject);
+                        } else {
+                            searchPage.appendChild(sectionToInject);
+                        }
                     }
                 }
                 return true;
