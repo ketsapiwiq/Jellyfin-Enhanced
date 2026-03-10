@@ -466,22 +466,28 @@
                 JE.initializeSplashScreen();
             }
 
-            // Stage 3: Load ALL component scripts
+            // Stage 3: Load critical scripts first, defer non-critical ones
             const basePath = '/JellyfinEnhanced/js';
-            const allComponentScripts = [
-                // enhanced
+            
+            // Critical: Required for core UI functionality before splash hides
+            const criticalScripts = [
                 'enhanced/config.js',
                 'enhanced/helpers.js',
                 'enhanced/icons.js',
                 'enhanced/features.js',
                 'enhanced/events.js',
+                'enhanced/themer.js',
+                'enhanced/ui.js',
+            ];
+            
+            // Deferred: Can load after UI is visible
+            const deferredScripts = [
+                // enhanced (remaining)
                 'enhanced/playback.js',
                 'enhanced/hidden-content.js',
                 'enhanced/hidden-content-page.js',
                 'enhanced/hidden-content-custom-tab.js',
                 'enhanced/subtitles.js',
-                'enhanced/themer.js',
-                'enhanced/ui.js',
                 'enhanced/bookmarks.js',
                 'enhanced/bookmarks-library.js',
                 'enhanced/osd-rating.js',
@@ -533,8 +539,12 @@
                 // others
                 'others/letterboxd-links.js',
             ];
-            await loadScripts(allComponentScripts, basePath);
-            console.log('🪼 Jellyfin Enhanced: All component scripts loaded.');
+            
+            await loadScripts(criticalScripts, basePath);
+            console.log('🪼 Jellyfin Enhanced: Critical scripts loaded.');
+            
+            // Store deferred scripts for later loading via requestIdleCallback
+            JE._deferredScripts = { scripts: deferredScripts, basePath, loaded: false };
 
             // Stage 4: Initialize core settings/shortcuts using potentially defined functions
             if (typeof JE.loadSettings === 'function' && typeof JE.initializeShortcuts === 'function') {
@@ -567,7 +577,7 @@
                 }
             }
 
-            // Stage 5: Initialize theme system first
+            // Stage 5: Initialize theme system first (required before splash hides)
             if (typeof JE.themer?.init === 'function') {
                 JE.themer.init();
                 console.log('🪼 Jellyfin Enhanced: Theme system initialized.');
@@ -578,54 +588,70 @@
                 JE._cacheManager.forceSave();
             });
 
-            // Stage 6: Initialize feature modules
-            if (typeof JE.initializeEnhancedScript === 'function') JE.initializeEnhancedScript();
-            if (typeof JE.initializeElsewhereScript === 'function' && JE.pluginConfig?.ElsewhereEnabled) JE.initializeElsewhereScript();
-            if (typeof JE.initializeJellyseerrScript === 'function' && JE.pluginConfig?.JellyseerrEnabled) JE.initializeJellyseerrScript();
-            if (typeof JE.jellyseerrIssueReporter?.initialize === 'function' && JE.pluginConfig?.JellyseerrEnabled) JE.jellyseerrIssueReporter.initialize();
-            if (typeof JE.initializePauseScreen === 'function') JE.initializePauseScreen();
-            if (typeof JE.initializeBookmarks === 'function') JE.initializeBookmarks();
-            if (typeof JE.initializeQualityTags === 'function' && JE.currentSettings?.qualityTagsEnabled) JE.initializeQualityTags();
-            if (typeof JE.initializeGenreTags === 'function' && JE.currentSettings?.genreTagsEnabled) JE.initializeGenreTags();
-            if (typeof JE.initializeRatingTags === 'function' && JE.currentSettings?.ratingTagsEnabled) JE.initializeRatingTags();
-            if (typeof JE.initializeArrLinksScript === 'function' && JE.pluginConfig?.ArrLinksEnabled) JE.initializeArrLinksScript();
-            if (typeof JE.initializeArrTagLinksScript === 'function' && JE.pluginConfig?.ArrTagsShowAsLinks) JE.initializeArrTagLinksScript();
-            if (typeof JE.initializeLetterboxdLinksScript === 'function' && JE.pluginConfig?.LetterboxdEnabled) JE.initializeLetterboxdLinksScript();
-            if (typeof JE.initializeReviewsScript === 'function' && JE.pluginConfig?.ShowReviews) JE.initializeReviewsScript();
-            if (typeof JE.initializeLanguageTags === 'function' && JE.currentSettings?.languageTagsEnabled) JE.initializeLanguageTags();
-            if (typeof JE.initializePeopleTags === 'function' && JE.currentSettings?.peopleTagsEnabled) JE.initializePeopleTags();
-            if (typeof JE.initializeOsdRating === 'function') JE.initializeOsdRating();
-            // Skip hidden content initialization when feature is disabled server-wide — JE.hiddenContent stays undefined, safely disabling all downstream consumers
-            if (typeof JE.initializeHiddenContent === 'function' && JE.pluginConfig?.HiddenContentEnabled) JE.initializeHiddenContent();
-
-            if (JE.pluginConfig?.ColoredRatingsEnabled && typeof JE.initializeColoredRatings === 'function') {
-                JE.initializeColoredRatings();
-            }
-            if (JE.pluginConfig?.ThemeSelectorEnabled && typeof JE.initializeThemeSelector === 'function') {
-                JE.initializeThemeSelector();
-            }
-            if (JE.pluginConfig?.ColoredActivityIconsEnabled && typeof JE.initializeActivityIcons === 'function') {
-                JE.initializeActivityIcons();
-            }
-            if (JE.pluginConfig?.PluginIconsEnabled && typeof JE.initializePluginIcons === 'function') {
-                JE.initializePluginIcons();
-            }
-            if (JE.pluginConfig?.DownloadsPageEnabled && typeof JE.initializeDownloadsPage === 'function') {
-                JE.initializeDownloadsPage();
-            }
-            if (JE.pluginConfig?.CalendarPageEnabled && typeof JE.initializeCalendarPage === 'function') {
-                JE.initializeCalendarPage();
-            }
-            if (JE.pluginConfig?.HiddenContentEnabled && typeof JE.initializeHiddenContentPage === 'function') {
-                JE.initializeHiddenContentPage();
-            }
-
-            console.log('🪼 Jellyfin Enhanced: All components initialized successfully.');
-
-            // Final Stage: Hide splash screen
+            // Hide splash screen NOW - UI is ready, defer remaining work
             if (typeof JE.hideSplashScreen === 'function') {
                 JE.hideSplashScreen();
             }
+
+            // Stage 6: Deferred initialization via requestIdleCallback
+            const scheduleDeferredWork = () => {
+                const ric = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
+                
+                ric(async () => {
+                    // Load deferred scripts during idle time
+                    if (JE._deferredScripts && !JE._deferredScripts.loaded) {
+                        const { scripts, basePath } = JE._deferredScripts;
+                        await loadScripts(scripts, basePath);
+                        JE._deferredScripts.loaded = true;
+                        console.log('🪼 Jellyfin Enhanced: Deferred scripts loaded.');
+                    }
+
+                    // Initialize feature modules after deferred scripts are ready
+                    if (typeof JE.initializeEnhancedScript === 'function') JE.initializeEnhancedScript();
+                    if (typeof JE.initializeElsewhereScript === 'function' && JE.pluginConfig?.ElsewhereEnabled) JE.initializeElsewhereScript();
+                    if (typeof JE.initializeJellyseerrScript === 'function' && JE.pluginConfig?.JellyseerrEnabled) JE.initializeJellyseerrScript();
+                    if (typeof JE.jellyseerrIssueReporter?.initialize === 'function' && JE.pluginConfig?.JellyseerrEnabled) JE.jellyseerrIssueReporter.initialize();
+                    if (typeof JE.initializePauseScreen === 'function') JE.initializePauseScreen();
+                    if (typeof JE.initializeBookmarks === 'function') JE.initializeBookmarks();
+                    if (typeof JE.initializeQualityTags === 'function' && JE.currentSettings?.qualityTagsEnabled) JE.initializeQualityTags();
+                    if (typeof JE.initializeGenreTags === 'function' && JE.currentSettings?.genreTagsEnabled) JE.initializeGenreTags();
+                    if (typeof JE.initializeRatingTags === 'function' && JE.currentSettings?.ratingTagsEnabled) JE.initializeRatingTags();
+                    if (typeof JE.initializeArrLinksScript === 'function' && JE.pluginConfig?.ArrLinksEnabled) JE.initializeArrLinksScript();
+                    if (typeof JE.initializeArrTagLinksScript === 'function' && JE.pluginConfig?.ArrTagsShowAsLinks) JE.initializeArrTagLinksScript();
+                    if (typeof JE.initializeLetterboxdLinksScript === 'function' && JE.pluginConfig?.LetterboxdEnabled) JE.initializeLetterboxdLinksScript();
+                    if (typeof JE.initializeReviewsScript === 'function' && JE.pluginConfig?.ShowReviews) JE.initializeReviewsScript();
+                    if (typeof JE.initializeLanguageTags === 'function' && JE.currentSettings?.languageTagsEnabled) JE.initializeLanguageTags();
+                    if (typeof JE.initializePeopleTags === 'function' && JE.currentSettings?.peopleTagsEnabled) JE.initializePeopleTags();
+                    if (typeof JE.initializeOsdRating === 'function') JE.initializeOsdRating();
+                    if (typeof JE.initializeHiddenContent === 'function' && JE.pluginConfig?.HiddenContentEnabled) JE.initializeHiddenContent();
+
+                    if (JE.pluginConfig?.ColoredRatingsEnabled && typeof JE.initializeColoredRatings === 'function') {
+                        JE.initializeColoredRatings();
+                    }
+                    if (JE.pluginConfig?.ThemeSelectorEnabled && typeof JE.initializeThemeSelector === 'function') {
+                        JE.initializeThemeSelector();
+                    }
+                    if (JE.pluginConfig?.ColoredActivityIconsEnabled && typeof JE.initializeActivityIcons === 'function') {
+                        JE.initializeActivityIcons();
+                    }
+                    if (JE.pluginConfig?.PluginIconsEnabled && typeof JE.initializePluginIcons === 'function') {
+                        JE.initializePluginIcons();
+                    }
+                    if (JE.pluginConfig?.DownloadsPageEnabled && typeof JE.initializeDownloadsPage === 'function') {
+                        JE.initializeDownloadsPage();
+                    }
+                    if (JE.pluginConfig?.CalendarPageEnabled && typeof JE.initializeCalendarPage === 'function') {
+                        JE.initializeCalendarPage();
+                    }
+                    if (JE.pluginConfig?.HiddenContentEnabled && typeof JE.initializeHiddenContentPage === 'function') {
+                        JE.initializeHiddenContentPage();
+                    }
+
+                    console.log('🪼 Jellyfin Enhanced: All components initialized successfully.');
+                });
+            };
+
+            scheduleDeferredWork()
 
         } catch (error) {
             console.error('🪼 Jellyfin Enhanced: CRITICAL INITIALIZATION FAILURE:', error);
