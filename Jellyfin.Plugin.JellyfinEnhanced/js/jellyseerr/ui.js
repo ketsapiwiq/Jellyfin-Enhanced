@@ -806,6 +806,9 @@
             const noResultsMessage = searchPage.querySelector('.noItemsMessage');
             const allSections = Array.from(searchPage.querySelectorAll('.verticalSection:not(.jellyseerr-section)'));
 
+            // Get the ordering setting: 'fastest', 'jellyfin', or 'seerr'
+            const orderSetting = (JE.pluginConfig?.JellyseerrSearchResultsOrder || 'fastest').toLowerCase();
+
             if (noResultsMessage) {
                 noResultsMessage.textContent = JE.t('jellyseerr_no_results_jellyfin', { query });
                 noResultsMessage.parentElement.insertBefore(sectionToInject, noResultsMessage.nextSibling);
@@ -825,12 +828,30 @@
 
                 if (lastPrimarySection) {
                     const firstPrimarySection = allSections[0];
-                    if (firstPrimarySection) {
-                        firstPrimarySection.before(sectionToInject);
+                    
+                    if (orderSetting === 'jellyfin') {
+                        // Put Seerr AFTER Jellyfin sections
+                        lastPrimarySection.after(sectionToInject);
+                    } else if (orderSetting === 'seerr') {
+                        // Put Seerr BEFORE Jellyfin sections
+                        if (firstPrimarySection) {
+                            firstPrimarySection.before(sectionToInject);
+                        } else {
+                            const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
+                            if (resultsContainer) {
+                                resultsContainer.prepend(sectionToInject);
+                            } else {
+                                searchPage.appendChild(sectionToInject);
+                            }
+                        }
                     } else {
+                        // 'fastest' - natural placement (no forced ordering)
+                        // Inject at the end of the results container for neutral placement
                         const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
                         if (resultsContainer) {
-                            resultsContainer.prepend(sectionToInject);
+                            resultsContainer.appendChild(sectionToInject);
+                        } else if (lastPrimarySection) {
+                            lastPrimarySection.after(sectionToInject);
                         } else {
                             searchPage.appendChild(sectionToInject);
                         }
