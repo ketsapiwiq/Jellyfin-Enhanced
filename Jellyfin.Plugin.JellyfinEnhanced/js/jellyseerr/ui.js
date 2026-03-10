@@ -351,7 +351,7 @@
             .jellyseerr-card { position: relative; }
             .jellyseerr-card .cardScalable { contain: paint; }
             .jellyseerr-icon-on-card { width: 1.2em !important; height: 1.2em !important; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); flex-shrink: 0; }
-            .jellyseerr-status-badge { position: absolute; top: 8px; right: 8px; z-index: 100; width: 1.5em; height: 1.5em; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.3); box-shadow: 0 0 1px rgba(255,255,255,0.4) inset, 0 4px 12px rgba(0,0,0,0.6); }
+            .jellyseerr-status-badge { position: absolute; top: 8px; right: 8px; z-index: 100; width: 1.5em; height: 1.5em; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.3); box-shadow: 0 0 1px rgba(255,255,255,0.4) inset, 0 4px 12px rgba(0,0,0,0.6); pointer-events: auto; }
             .jellyseerr-status-badge svg { width: 1.4em; height: 1.4em; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
             .jellyseerr-status-badge.status-available { background-color: rgba(34, 197, 94, 0.7); border-color: rgba(34, 197, 94, 0.3); }
             .jellyseerr-status-badge.status-processing { background-color: rgba(99, 102, 241, 0.7); border-color: rgba(99, 102, 241, 0.3); }
@@ -389,6 +389,10 @@
             .jellyseerr-elsewhere-icons img { width: 1.8em; border-radius: 0.7em; background-color: rgba(255,255,255,0.5); padding: 2px;}
             .jellyseerr-meta { display: flex; justify-content: center; align-items: center; gap: 1em; padding: 0 .75em; }
             .jellyseerr-rating { display: flex; align-items: center; gap: .3em; color: #bdbdbd; }
+            .jellyseerr-meta-link { color: inherit; text-decoration: none; cursor: pointer; }
+            .jellyseerr-meta-link:hover { color: #fff; }
+            .jellyseerr-year-link, .jellyseerr-rating-link { display: inline-flex; align-items: center; }
+            .jellyseerr-rating-link .jellyseerr-rating { color: inherit; }
             .cardText-first > a.jellyseerr-more-info-link { padding: 0 !important; margin: 0 !important; color: inherit; text-decoration: none; }
             /* REQUEST BUTTONS */
             .jellyseerr-request-button { display: flex; justify-content: center; align-items: center; gap: 0.5em; white-space: normal; text-align: center; padding: 0.6em 1.2em; line-height: 1.2; font-size: 0.9em; transition: background .2s, border-color .2s, color .2s, transform .2s; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; position: relative; z-index: 10; }
@@ -939,7 +943,7 @@
      * @param {HTMLElement} card - The card element.
      * @param {Object} item - The search result item.
      */
-    function setStatusBadge(card, item) {
+    function setStatusBadge(card, item, jellyfinHref) {
         const badge = card.querySelector('.jellyseerr-status-badge');
         if (!badge || !item.mediaInfo) {
             if (badge) badge.style.display = 'none';
@@ -1010,6 +1014,16 @@
                 addDownloadProgressHover(badge, item);
             }
         }
+
+        // Make badge clickable to navigate to Jellyfin when available
+        if (jellyfinHref) {
+            badge.style.cursor = 'pointer';
+            badge.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.location.hash = jellyfinHref.replace('#!', '');
+            });
+        }
     }
 
     /**
@@ -1067,13 +1081,13 @@
                 </div>
                 <div class="cardText cardTextCentered cardText-secondary jellyseerr-meta">
                     <img src="https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish/logos/favicon.ico" class="jellyseerr-icon-on-card" alt="Jellyseerr"/>
-                    <bdi>${year}</bdi>
-                    <div class="jellyseerr-rating">${icons.star}<span>${rating}</span></div>
+                    ${jellyfinHref ? `<a href="${jellyfinHref}" class="jellyseerr-meta-link jellyseerr-year-link"><bdi>${year}</bdi></a>` : `<bdi>${year}</bdi>`}
+                    ${jellyfinHref ? `<a href="${jellyfinHref}" class="jellyseerr-meta-link jellyseerr-rating-link"><div class="jellyseerr-rating">${icons.star}<span>${rating}</span></div></a>` : `<div class="jellyseerr-rating">${icons.star}<span>${rating}</span></div>`}
                 </div>
             </div>`;
 
         // Set the status badge icon based on the item's status
-        setStatusBadge(card, item);
+        setStatusBadge(card, item, jellyfinHref);
 
         // Disable default Jellyfin card click behavior so we fully control taps/clicks
         const overlayContainer = card.querySelector('.cardOverlayContainer');
@@ -1212,19 +1226,30 @@
         // If movie belongs to a collection, show a collection badge that opens the modal
         addCollectionMembershipBadge(card, item);
 
-        // Add click handler for the poster image - opens modal
+        // Add click handler for the poster image
         const posterImage = card.querySelector('.jellyseerr-poster-image');
-        if (posterImage && useMoreInfoModal && JE.jellyseerrMoreInfo) {
-            posterImage.style.cursor = 'pointer';
-            posterImage.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const tmdbId = parseInt(item.id);
-                const mediaType = item.mediaType;
-                if (tmdbId && mediaType) {
-                    JE.jellyseerrMoreInfo.open(tmdbId, mediaType);
-                }
-            });
+        if (posterImage) {
+            if (useMoreInfoModal && JE.jellyseerrMoreInfo) {
+                // Modal mode: open the more info modal
+                posterImage.style.cursor = 'pointer';
+                posterImage.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const tmdbId = parseInt(item.id);
+                    const mediaType = item.mediaType;
+                    if (tmdbId && mediaType) {
+                        JE.jellyseerrMoreInfo.open(tmdbId, mediaType);
+                    }
+                });
+            } else if (jellyfinHref) {
+                // Library mode: navigate to Jellyfin item page
+                posterImage.style.cursor = 'pointer';
+                posterImage.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.location.hash = jellyfinHref.replace('#!', '');
+                });
+            }
         }
 
         // Add click handler for the title link
