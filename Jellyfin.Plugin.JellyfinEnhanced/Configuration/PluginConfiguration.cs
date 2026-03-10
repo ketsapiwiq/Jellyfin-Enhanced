@@ -110,6 +110,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             JellyseerrDisableCache = false;
             JellyseerrResponseCacheTtlMinutes = 10;
             JellyseerrUserIdCacheTtlMinutes = 30;
+            JellyseerrSearchResultsOrder = "fastest";
 
             // Arr Links Settings
             ArrLinksEnabled = false;
@@ -278,6 +279,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
         public bool JellyseerrDisableCache { get; set; }
         public int JellyseerrResponseCacheTtlMinutes { get; set; }
         public int JellyseerrUserIdCacheTtlMinutes { get; set; }
+        public string JellyseerrSearchResultsOrder { get; set; } = "fastest"; // "fastest", "jellyfin", or "seerr"
 
         // Arr Links Settings
         public bool ArrLinksEnabled { get; set; }

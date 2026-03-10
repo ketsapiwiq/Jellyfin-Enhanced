@@ -351,7 +351,7 @@
             .jellyseerr-card { position: relative; }
             .jellyseerr-card .cardScalable { contain: paint; }
             .jellyseerr-icon-on-card { width: 1.2em !important; height: 1.2em !important; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); flex-shrink: 0; }
-            .jellyseerr-status-badge { position: absolute; top: 8px; right: 8px; z-index: 100; width: 1.5em; height: 1.5em; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.3); box-shadow: 0 0 1px rgba(255,255,255,0.4) inset, 0 4px 12px rgba(0,0,0,0.6); }
+            .jellyseerr-status-badge { position: absolute; top: 8px; right: 8px; z-index: 100; width: 1.5em; height: 1.5em; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(255,255,255,0.3); box-shadow: 0 0 1px rgba(255,255,255,0.4) inset, 0 4px 12px rgba(0,0,0,0.6); pointer-events: auto; }
             .jellyseerr-status-badge svg { width: 1.4em; height: 1.4em; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
             .jellyseerr-status-badge.status-available { background-color: rgba(34, 197, 94, 0.7); border-color: rgba(34, 197, 94, 0.3); }
             .jellyseerr-status-badge.status-processing { background-color: rgba(99, 102, 241, 0.7); border-color: rgba(99, 102, 241, 0.3); }
@@ -389,6 +389,10 @@
             .jellyseerr-elsewhere-icons img { width: 1.8em; border-radius: 0.7em; background-color: rgba(255,255,255,0.5); padding: 2px;}
             .jellyseerr-meta { display: flex; justify-content: center; align-items: center; gap: 1em; padding: 0 .75em; }
             .jellyseerr-rating { display: flex; align-items: center; gap: .3em; color: #bdbdbd; }
+            .jellyseerr-meta-link { color: inherit; text-decoration: none; cursor: pointer; }
+            .jellyseerr-meta-link:hover { color: #fff; }
+            .jellyseerr-year-link, .jellyseerr-rating-link { display: inline-flex; align-items: center; }
+            .jellyseerr-rating-link .jellyseerr-rating { color: inherit; }
             .cardText-first > a.jellyseerr-more-info-link { padding: 0 !important; margin: 0 !important; color: inherit; text-decoration: none; }
             /* REQUEST BUTTONS */
             .jellyseerr-request-button { display: flex; justify-content: center; align-items: center; gap: 0.5em; white-space: normal; text-align: center; padding: 0.6em 1.2em; line-height: 1.2; font-size: 0.9em; transition: background .2s, border-color .2s, color .2s, transform .2s; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; position: relative; z-index: 10; }
@@ -802,6 +806,9 @@
             const noResultsMessage = searchPage.querySelector('.noItemsMessage');
             const allSections = Array.from(searchPage.querySelectorAll('.verticalSection:not(.jellyseerr-section)'));
 
+            // Get the ordering setting: 'fastest', 'jellyfin', or 'seerr'
+            const orderSetting = (JE.pluginConfig?.JellyseerrSearchResultsOrder || 'fastest').toLowerCase();
+
             if (noResultsMessage) {
                 noResultsMessage.textContent = JE.t('jellyseerr_no_results_jellyfin', { query });
                 noResultsMessage.parentElement.insertBefore(sectionToInject, noResultsMessage.nextSibling);
@@ -820,13 +827,34 @@
                 }
 
                 if (lastPrimarySection) {
-                    lastPrimarySection.after(sectionToInject);
-                } else {
-                    const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
-                    if (resultsContainer) {
-                        resultsContainer.prepend(sectionToInject);
+                    const firstPrimarySection = allSections[0];
+                    
+                    if (orderSetting === 'jellyfin') {
+                        // Put Seerr AFTER Jellyfin sections
+                        lastPrimarySection.after(sectionToInject);
+                    } else if (orderSetting === 'seerr') {
+                        // Put Seerr BEFORE Jellyfin sections
+                        if (firstPrimarySection) {
+                            firstPrimarySection.before(sectionToInject);
+                        } else {
+                            const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
+                            if (resultsContainer) {
+                                resultsContainer.prepend(sectionToInject);
+                            } else {
+                                searchPage.appendChild(sectionToInject);
+                            }
+                        }
                     } else {
-                        searchPage.appendChild(sectionToInject);
+                        // 'fastest' - natural placement (no forced ordering)
+                        // Inject at the end of the results container for neutral placement
+                        const resultsContainer = searchPage.querySelector('.searchResults, [class*="searchResults"], .padded-top.padded-bottom-page');
+                        if (resultsContainer) {
+                            resultsContainer.appendChild(sectionToInject);
+                        } else if (lastPrimarySection) {
+                            lastPrimarySection.after(sectionToInject);
+                        } else {
+                            searchPage.appendChild(sectionToInject);
+                        }
                     }
                 }
                 return true;
