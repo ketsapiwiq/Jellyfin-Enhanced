@@ -302,6 +302,9 @@ function buildModalContent(data, mediaType) {
         ? `https://image.tmdb.org/t/p/w500${data.posterPath}`
         : '';
 
+    const jellyfinMediaId = data.mediaInfo?.jellyfinMediaId || data.mediaInfo?.jellyfinMediaId4k || null;
+    const jellyfinHref = jellyfinMediaId ? `#!/details?id=${jellyfinMediaId}` : null;
+
     return `
         <div class="modal-overlay">
             <div class="modal-container">
@@ -328,11 +331,11 @@ function buildModalContent(data, mediaType) {
                         <div class="modal-left">
                             <div class="header-section">
                                 <div class="header-poster">
-                                    ${posterUrl ? `<img src="${posterUrl}" alt="${title}" />` : ''}
+                                    ${posterUrl ? (jellyfinHref ? `<a href="${jellyfinHref}" is="emby-linkbutton" class="je-modal-poster-link"><img src="${posterUrl}" alt="${escapeHtml(title)}" /></a>` : `<img src="${posterUrl}" alt="${escapeHtml(title)}" />`) : ''}
                                 </div>
                                 <div class="header-info">
                                     <div class="title-row">
-                                    <h1 class="title">${escapeHtml(title)} ${year ? `<span class="year">(${year})</span>` : ''}</h1>
+                                    <h1 class="title">${jellyfinHref ? `<a href="${jellyfinHref}" is="emby-linkbutton" class="je-modal-title-link">${escapeHtml(title)}</a>` : escapeHtml(title)} ${year ? `<span class="year">(${year})</span>` : ''}</h1>
                                     <div class="title-chip" data-mount="je-status-chip"></div>
                                     </div>
                                     <div class="meta-info">
@@ -1609,6 +1612,28 @@ function injectStyles() {
             width: 100%;
             border-radius: 8px;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .je-modal-poster-link {
+            display: block;
+        }
+
+        .je-modal-poster-link img {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .je-modal-poster-link:hover img {
+            transform: scale(1.02);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+        }
+
+        .je-modal-title-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .je-modal-title-link:hover {
+            text-decoration: underline;
         }
 
         .je-more-info-modal .header-info {
