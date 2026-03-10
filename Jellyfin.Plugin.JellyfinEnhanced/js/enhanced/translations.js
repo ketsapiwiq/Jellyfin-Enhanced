@@ -71,6 +71,49 @@
         }
     }
 
+    /**
+     * Fetches translations from GitHub in the background and applies them when ready.
+     * Non-blocking: returns immediately, updates translations asynchronously.
+     */
+    function fetchFromGitHubAsync(code, pluginVersion, cacheKey, timestampKey) {
+        fetch(`${GITHUB_RAW_BASE}/${code}.json`, {
+            method: 'GET',
+            cache: 'no-cache',
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            // If language not found, try English from GitHub
+            if (response.status === 404 && code !== 'en') {
+                return fetch(`${GITHUB_RAW_BASE}/en.json`, {
+                    method: 'GET',
+                    cache: 'no-cache',
+                    headers: { 'Accept': 'application/json' }
+                }).then(enRes => enRes.ok ? enRes.json() : null);
+            }
+            return null;
+        })
+        .then(translations => {
+            if (translations && typeof translations === 'object' && Object.keys(translations).length > 0) {
+                // Update the global translations
+                Object.assign(JE.translations, translations);
+                JE.t = window.JellyfinEnhanced.t; // Refresh the t() function reference
+                console.log(`🪼 Jellyfin Enhanced: Applied GitHub translations for ${code} in background`);
+                
+                // Cache for future use
+                try {
+                    localStorage.setItem(cacheKey, JSON.stringify(translations));
+                    localStorage.setItem(timestampKey, Date.now().toString());
+                } catch (e) { /* ignore storage errors */ }
+            }
+        })
+        .catch(err => {
+            console.debug('🪼 Jellyfin Enhanced: Background GitHub fetch failed (non-critical):', err.message);
+        });
+    }
+
     async function tryLoadSingleLanguage(code, pluginVersion) {
         const cacheKey = `JE_translation_${code}_${pluginVersion}`;
         const timestampKey = `JE_translation_ts_${code}_${pluginVersion}`;
@@ -89,6 +132,7 @@
             }
         }
 
+        // Try bundled translations first (local server, fast)
         console.log(`🪼 Jellyfin Enhanced: Loading bundled translations for ${code}...`);
         try {
             const bundledResponse = await fetch(ApiClient.getUrl(`/JellyfinEnhanced/locales/${code}.json`));
@@ -99,82 +143,35 @@
                     localStorage.setItem(timestampKey, Date.now().toString());
                     console.log(`🪼 Jellyfin Enhanced: Successfully loaded and cached bundled translations for ${code} (version: ${pluginVersion})`);
                 } catch (e) { /* ignore */ }
+                
+                // Trigger background GitHub fetch to update translations for next load
+                // This is non-blocking and doesn't affect current load time
+                fetchFromGitHubAsync(code, pluginVersion, cacheKey, timestampKey);
+                
                 return { translations, usedLang: code };
             }
         } catch (bundledError) {
-            console.warn('🪼 Jellyfin Enhanced: Bundled translations failed, falling back to GitHub:', bundledError.message);
+            console.warn('🪼 Jellyfin Enhanced: Bundled translations unavailable, trying GitHub in background:', bundledError.message);
         }
 
+        // Bundled failed - start GitHub fetch in background and return empty translations immediately
+        // This ensures the plugin loads without blocking on external network requests
+        fetchFromGitHubAsync(code, pluginVersion, cacheKey, timestampKey);
+
+        // Fall back to bundled English as immediate fallback
         try {
-            console.log(`🪼 Jellyfin Enhanced: Fetching translations for ${code} from GitHub...`);
-            const githubResponse = await fetch(`${GITHUB_RAW_BASE}/${code}.json`, {
-                method: 'GET',
-                cache: 'no-cache',
-                headers: { 'Accept': 'application/json' }
-            });
-
-            if (githubResponse.ok) {
-                const translations = await githubResponse.json();
-                try {
-                    localStorage.setItem(cacheKey, JSON.stringify(translations));
-                    localStorage.setItem(timestampKey, Date.now().toString());
-                    console.log(`🪼 Jellyfin Enhanced: Successfully fetched and cached translations for ${code} from GitHub (version: ${pluginVersion})`);
-                } catch (storageError) {
-                    console.warn('🪼 Jellyfin Enhanced: Failed to cache translations (localStorage full?)', storageError);
-                }
-                return { translations, usedLang: code };
+            const englishResponse = await fetch(ApiClient.getUrl('/JellyfinEnhanced/locales/en.json'));
+            if (englishResponse.ok) {
+                const translations = await englishResponse.json();
+                console.log(`🪼 Jellyfin Enhanced: Using English fallback while GitHub fetches ${code} in background`);
+                return { translations, usedLang: 'en' };
             }
-
-            if (githubResponse.status === 404 && code !== 'en') {
-                console.warn(`🪼 Jellyfin Enhanced: Language ${code} not found on GitHub, falling back to English`);
-                const englishResponse = await fetch(`${GITHUB_RAW_BASE}/en.json`, {
-                    method: 'GET',
-                    cache: 'no-cache',
-                    headers: { 'Accept': 'application/json' }
-                });
-
-                if (englishResponse.ok) {
-                    const translations = await englishResponse.json();
-                    try {
-                        const enCacheKey = `JE_translation_en_${pluginVersion}`;
-                        const enTimestampKey = `JE_translation_ts_en_${pluginVersion}`;
-                        localStorage.setItem(enCacheKey, JSON.stringify(translations));
-                        localStorage.setItem(enTimestampKey, Date.now().toString());
-                    } catch (e) { /* ignore */ }
-                    return { translations, usedLang: 'en' };
-                }
-            }
-
-            if (githubResponse.status === 403) {
-                console.warn('🪼 Jellyfin Enhanced: GitHub rate limit detected, using bundled fallback');
-            } else if (githubResponse.status >= 500) {
-                console.warn(`🪼 Jellyfin Enhanced: GitHub server error (${githubResponse.status}), using bundled fallback`);
-            }
-
-            throw new Error(`GitHub fetch failed with status ${githubResponse.status}`);
-        } catch (githubError) {
-            console.warn('🪼 Jellyfin Enhanced: GitHub fetch failed, falling back to bundled translations:', githubError.message);
+        } catch (e) {
+            console.warn('🪼 Jellyfin Enhanced: English fallback also failed:', e.message);
         }
 
-        console.log(`🪼 Jellyfin Enhanced: Loading bundled translations for ${code}...`);
-        let response = await fetch(ApiClient.getUrl(`/JellyfinEnhanced/locales/${code}.json`));
-
-        if (response.ok) {
-            const translations = await response.json();
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify(translations));
-                localStorage.setItem(timestampKey, Date.now().toString());
-            } catch (e) { /* ignore */ }
-            return { translations, usedLang: code };
-        }
-
-        console.warn(`🪼 Jellyfin Enhanced: Bundled ${code} not found, falling back to bundled English`);
-        response = await fetch(ApiClient.getUrl('/JellyfinEnhanced/locales/en.json'));
-        if (response.ok) {
-            return { translations: await response.json(), usedLang: 'en' };
-        }
-
-        throw new Error('Failed to load English fallback translations');
+        // Return empty - UI will use translation keys as fallback text
+        return { translations: {}, usedLang: code };
     }
 
     JE.loadTranslations = async function() {
